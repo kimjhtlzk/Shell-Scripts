@@ -1,0 +1,1037 @@
+#!/bin/sh
+
+$(yum -y install xinetd)
+$(systemctl restart xinetd)
+$(yum -y install httpd-tools)
+$(yum -y install sysstat)
+
+
+zero()
+{
+
+echo "###################################################################################"
+echo "###################################################################################"
+echo "				      보안 점검                                  	          "
+echo "###################################################################################"
+echo "###################################################################################"
+echo 
+echo
+return 0
+}
+
+account()
+{
+echo
+echo "###################################################################################"
+echo "###################################################################################"
+echo "				      계정 관리                                  	          "
+echo "###################################################################################"
+echo "###################################################################################"
+echo
+return 0
+}
+
+file()
+{
+echo
+echo "###################################################################################"
+echo "###################################################################################"
+echo "			         파일 및 디렉터리 관리                                           "
+echo "###################################################################################"
+echo "###################################################################################"
+echo
+return 0
+}
+
+system()
+{
+echo
+echo "###################################################################################"
+echo "###################################################################################"
+echo "				           시스템 점검                                  	          "
+echo "###################################################################################"
+echo "###################################################################################"
+echo
+return 0
+}
+
+one()
+{
+echo
+echo "###################################################################################"
+echo " 1.  root 계정 원격 접속 제한                                   "
+echo "###################################################################################"
+echo
+echo
+
+grep pts /etc/securetty > /dev/null 2>&1
+if [ $? -eq 0 ] ; then
+echo "root 직접 접속이 허용되었거나, 원격서비스를 사용 중 입니다."
+else
+echo "root 직접 접속이 거부되었거나, 원격서비스를 사용하지 않고 있습니다."
+fi
+echo
+echo
+return 0
+}
+
+two()
+{
+alias ls=ls
+
+echo
+echo "###################################################################################"
+echo " 2.  패스워드 복잡성 확인                                   "
+echo "###################################################################################"
+echo
+echo
+cat /etc/pam.d/system-auth | grep "^password requisite pam_cracklib.so" > /dev/null 2>&1
+
+if [ $? -eq 0 ] ; then
+	echo "영문 숫자 특수문자가 혼합된 자리 8자리 이상의 패스워드가 설정되었습니다."
+else
+	echo "영문 숫자 특수문자 혼합된 8자리 이상의 패스워드가 설정되지 않았습니니다."
+fi
+echo
+echo
+return 0
+}
+
+three()
+{
+echo
+echo "###################################################################################"
+echo " 3.  계정 잠금 임계값 설정                                   "
+echo "###################################################################################"
+echo
+echo
+TI=`grep deny= /etc/pam.d/password-auth | awk '{print $5}' | awk -F = '{print $2}'`
+
+if [ "`grep deny= /etc/pam.d/password-auth`" ]
+	then
+		echo "    ==> [안전] "$TI"번 로그인 실패시 계정이 잠김니다" 
+	else
+		echo "    ==> [취약] 계정 잠금 정책이 설정되어 있지 않습니다"
+fi
+echo
+echo
+return 0
+}
+
+four()
+{
+echo
+echo "###################################################################################"
+echo " 4.  passwd 파일 보호                                 "
+echo "###################################################################################"
+echo
+echo
+if [ "`cat /etc/passwd | grep "root" | awk -F: '{print $2}' | sed -n '1p'`" = x ]
+	then
+		if test -r /etc/shadow
+			then
+				echo "    ==> [안전] Shadow 패스워드 시스템을 사용중입니다" 
+			else
+				echo "    ==> [취약] Passwd 패스워드 시스템을 사용중입니다" 
+		fi
+fi
+echo 
+
+
+
+echo "  04-1. /etc/passwd" 
+
+PP=`ls -l /etc/passwd | awk {'print $1'}`
+PO=`ls -l /etc/passwd | awk {'print $3'}`
+PG=`ls -l /etc/passwd | awk {'print $4'}`
+
+if [ $PP = -r--r--r--. ]
+	then
+		echo "    ==> [안전] 권한   : " $PP 
+else
+	if [ $PP = -rw-r--r--. ]
+		then
+			echo "    ==> [안전] 권한   : " $PP 
+		else
+			echo "    ==> [취약] 권한   : " $PP 
+	fi
+fi
+
+if [ $PO = root ]
+	then
+		echo "    ==> [안전] 소유자 : " $PO 
+	else
+		echo "    ==> [취약] 소유자 : " $PO 
+fi
+
+if [ $PG = root ]
+	then
+		echo "    ==> [안전] 그룹   : " $PO 
+	else
+		echo "    ==> [취약] 그룹   : " $PO 
+fi
+
+echo 
+
+
+
+
+
+echo "  04-2. /etc/shadow" 
+
+if test `ls -l /etc/shadow | awk {'print $1'} ` = -r--------.
+	then
+		echo "    ==> [안전] 권한   :  "`ls -l /etc/shadow | awk {'print $1'}` 
+else
+	if test `ls -l /etc/shadow | awk {'print $1'} ` = ----------.
+		then
+			echo "    ==> [안전] 권한   :  "`ls -l /etc/shadow | awk {'print $1'}` 
+		else
+			echo "    ==> [취약] 권한   :  "`ls -l /etc/shadow | awk {'print $1'}` 
+	fi
+fi
+
+
+
+if test `ls -l /etc/shadow | awk {'print $3'}` = root
+	then
+		echo "    ==> [안전] 소유자 : " `ls -l /etc/shadow | awk {'print $3'}` 
+	else
+		echo "    ==> [취약] 소유자 : " `ls -l /etc/shadow | awk {'print $3'}` 
+fi
+
+if test `ls -l /etc/shadow | awk {'print $4'} ` = root 
+	then
+		echo "    ==> [안전] 그룹   :  "`ls -l /etc/shadow | awk {'print $4'}` 
+	else
+		echo "    ==> [취약] 그룹   :  "`ls -l /etc/shadow | awk {'print $4'}` 
+fi
+
+echo 
+echo	
+return 0
+}
+	
+five()
+{
+echo
+echo "###################################################################################"
+echo " 5.  root 이외의 UID가 '0' 금지                                 "
+echo "###################################################################################"
+echo
+echo
+NUM=`awk -F: '{print $3}' /etc/passwd | sort -n | uniq -d | wc -l`
+
+if [ $NUM -gt 0 ] ; then
+	echo "[ root 계정과 동일한 UID를 갖는 계정이 존재합니다. ]"
+else
+	echo "[  root 계정과 동일한 UID를 갖는 계정이 존재하지 않습니다.  ]"
+fi
+echo
+return 0
+}
+
+six()
+{
+
+echo
+echo "###################################################################################"
+echo " 6.  root 계정 su 제한                                "
+echo "###################################################################################"
+echo
+echo
+NUM=`grep pam_wheel.so /etc/pam.d/su | grep -v '^#' | wc -l`
+	
+if [ $NUM -gt 0 ] ; then
+	echo "[  su 명령어를 특정 그룹에 속한 사용자만 사용하도록 제한되어 있습>니다.  ]"
+else
+	echo "[ su 명령어를 모든 사용자가 사용하도록 설정되어 있습니다. ]"
+fi
+echo
+echo
+return 0
+}
+
+seven()
+{
+echo
+echo "###################################################################################"
+echo " 7.  패스워드 최소 길이 확인                               "
+echo "###################################################################################"
+echo
+echo
+NUM=`grep PASS_MIN_LEN /etc/login.defs | grep -v '^#' | grep '^PASS_MIN_LEN' | awk '{print $2}'`
+	
+if [ $NUM -ge 8 ] ; then
+	echo "패스워드 최소 길이가 8자 이상으로 설정되어 있습니다"
+else
+	echo "패스워드 최소 길이가 8자 미만으로 설정되어 있습니다."
+fi
+echo
+return 0
+}
+
+eight()
+{
+echo
+echo "###################################################################################"
+echo " 8.  패스워드 최대 사용기간 설정                                "
+echo "###################################################################################"
+echo
+echo
+NUM=`grep PASS_MAX_DAYS /etc/login.defs | grep -v '^#' | grep '^PASS_MAX_DAYS' | awk '{print $2}'`
+	
+if [ $NUM -le 90 ] ; then
+	echo "패스워드 최대 사용기간이 90일 이하로 설정되어 있습니다."
+else
+	echo "패스워드 최대 사용기간이 90일 이하로 설정되어 있지 않습니다."
+fi
+echo
+return 0
+}
+
+nine()
+{
+echo
+echo "###################################################################################"
+echo " 9.  패스워드 최소 사용기간 설정                             "
+echo "###################################################################################"
+echo
+echo
+NUM=`grep PASS_MIN_DAYS /etc/login.defs | grep -v '^#' | grep '^PASS_MIN_DAYS' | awk '{print $2}'`
+	
+if [ $NUM -ge 1 ] ; then
+	echo "패스워드 최소 사용기간이 설정되어 있습니다."
+else
+	echo "패스워드 최소 사용기간이 설정되어 있지 않습니다."
+fi
+echo
+return 0
+}
+
+ten()
+{
+echo
+echo "###################################################################################"
+echo " 10.  동일한 UID 금지                             "
+echo "###################################################################################"
+echo
+echo
+
+cat /etc/passwd | awk -F: '{print $3}' > output.txt
+	
+NUM=`cat output.txt | sort -n | uniq -d | wc -l`
+if [ $NUM -gt 0 ]; then
+	echo "동일한 UID로 설정된 사용자 계정이 존재합니다."
+else
+	echo "동일한 UID로 설정된 사용자 계정이 존재하지 않습니다."
+fi
+	
+rm output.txt
+echo
+echo
+return 0
+}
+eleven()
+{
+echo
+echo "###################################################################################"
+echo " 11.  Session Timeout 설정                             "
+echo "###################################################################################"
+echo
+echo
+
+grep ^TMOUT /etx/profile > /dev/null 2>&1
+if [ $? -eq 0 ] ; then
+	echo "Session Timeout이 600초 이하로 설정되어 있습니다."
+else
+	echo "Session Timeout이 600초 이하로 설정되어있지 않습니다."
+fi
+echo
+echo
+return 0
+}
+
+
+
+
+twelve()
+{
+echo
+echo "###################################################################################"
+echo "12.  root 홈, 패스 디랙터리 권한 및 패스 설정                                 "
+echo "###################################################################################"
+echo
+echo
+
+ROOTPATH=`su - root -c 'echo $PATH'`
+
+echo $ROOTPATH | egrep '(^:|:$|::|^.:|:.:|:.$)' >/dev/null 2>&1
+
+if [ $? -eq 0 ] ; then
+
+echo WARN root 사용자 PATH 환경변수에 현재 디렉토리 포함되어 있습니다.
+
+INFO $TMP1 파일을 참조한다.
+
+echo $ROOTPATH >> $TMP1
+
+else
+
+echo OK root 사용자 PATH 환경변수에 현재 디렉토리가 포함되어 있지 않습니다.
+fi
+echo
+echo
+return 0
+}
+
+thirteen()
+{
+echo
+echo "###################################################################################"
+echo "23.  /etc/passwd 파일 소유자 및 권한 설정                    "
+echo "###################################################################################"
+echo
+echo
+FILE=/etc/passwd
+TMP1=`ls -l $FILE | awk '{print $3}'`
+
+if [ $TMP1 == 'root' ] ; then
+echo OK $FILE 의 소유자는 root입니다.
+else
+echo WARN $FILE 의 소유자는 root로 설정되어있지 않습니다.
+fi
+
+su - root -c 'find /etc/passwd -perm 644' > /dev/null 2>&1
+
+if [ $? -eq 0 ] ; then
+echo OK $FILE 의 퍼미션 설정이 되어있습니다.
+else
+echo WARN $FILE의 퍼미션 설정이 잘못 되어있습니다.
+fi
+echo
+echo
+return 0
+}
+
+fourteen()
+{
+echo
+echo "###################################################################################"
+echo "14.  /etc/shadow 파일 소유자 및 권한 설정                    "
+echo "###################################################################################"
+echo
+echo
+FILE=/etc/shadow
+TMP1=`ls -l $FILE | awk '{print $3}'`
+
+if [ $TMP1 == 'root' ] ; then
+echo OK $FILE 의 소유자는 root입니다.
+else
+echo WARN $FILE 의 소유자는 root로 설정되어있지 않습니다.
+fi
+
+su - root -c 'find /etc/passwd -perm 400' > /dev/null 2>&1
+
+if [ $? -eq 0 ] ; then
+echo OK $FILE 의 퍼미션 설정이 되어있습니다.
+else
+echo WARN $FILE의 퍼미션 설정이 잘못 되어있습니다.
+fi
+echo
+echo
+return 0
+}
+
+fifteen()
+{
+echo
+echo "###################################################################################"
+echo "15.  /etc/hosts 파일 소유자 및 권한 설정                    "
+echo "###################################################################################"
+echo
+echo
+FILE=/etc/hosts
+TMP1=`ls -l $FILE | awk '{print $3}'`
+
+if [ $TMP1 == 'root' ] ; then
+echo OK $FILE 의 소유자는 root입니다.
+else
+echo WARN $FILE 의 소유자는 root로 설정되어있지 않습니다.
+fi
+
+su - root -c 'find /etc/passwd -perm 600' > /dev/null 2>&1
+if [ $? -eq 0 ] ; then
+
+echo OK $FILE 의 퍼미션 설정이 되어있습니다.
+else
+echo WARN $FILE의 퍼미션 설정이 잘못 되어있습니다.
+fi
+echo
+echo
+return 0
+}
+
+
+sixteen()
+{
+echo
+echo "###################################################################################"
+echo "16.  /etc/syslog.conf 파일 소유자 및 권한 설정                    "
+echo "###################################################################################"
+echo
+echo
+FILE=/etc/rsyslog.conf
+ROOT=`ls -l $FILE | awk '{print $3}'`
+
+if [ $ROOT == 'root' ]; then
+echo OK $FILE의 소유자가 root로 설정되어 있습니다.
+else
+echo WARN $FILE의 소유자가 root로 설정되어 있지 않습니다.
+fi
+
+if ls -l $FILE | awk '{print $1}' | grep 'rw-r--r--' ; then
+echo OK $FILE 퍼미션이 올바르게 설정되어 있습니다.
+else
+echo WARN $FILE 의 퍼미션을 644\(으\)로 설정하세요.
+fi
+echo
+echo
+return 0
+}
+
+
+seventeen()
+{
+echo
+echo "###################################################################################"
+echo "17.  SUID, SGID, Sticky bit 설정 및 권한 설정                    "
+echo "###################################################################################"
+echo
+echo
+FILECHECK="/sbin/dump /usr/bin/lpq-lpd /usr/bin/newgrp /sbin/restore /usr/bin/lpr /usr/sbin/lpc /sbin/unix_chkpwd /usr/bin/lpr-lpd /usr/sbin/lpc-lpd /usr/bin/at /usr/bin/lprm /usr/sbin/traceroute /usr/bin/lpq /usr/bin/lprm-lpd /tmp /var/tmp"
+echo "" > /root/script/d.txt
+
+for check in $FILECHECK
+        do
+                if [ -e $check ]; then
+                        if [ $(ls -laL $check | awk '{print $1}' | egrep -i 's|t' | grep -v "grep" | wc -l) -ge 1 ]; then
+                                ls -lad $check          >> /root/script/d.txt                    
+                        else
+                                continue
+                        fi
+                else
+                        continue
+                fi
+        done
+
+for check in $FILECHECK
+        do
+		if [ -e $check ]; then
+                        if [ $(ls -laL $check | awk '{print $1}' | egrep -i 's|t' | grep -v "grep" | wc -l) -ge 1 ]; then
+                                var_suidsgid=$(ls -laL $check | awk '{print $1}' | grep -i 's' | grep -v "grep" | wc -l)
+                                ls -lad $check          >> /root/script/d.txt
+
+                                if [ $var_suidsgid -ge 1 ]; then
+                                        opt="false"
+                                        break
+                                else
+                                        opt="true"
+                                fi
+                        else
+                                opt="true"
+                                continue
+                        fi
+
+                else
+                        opt="true"
+                        continue
+                fi
+        done
+if [ "$opt" = "false" ]; then
+        echo "■ 결과 : 취약, SUID, SGID 등 특수 권한이 설정된 파일이 존재함"
+else
+        echo "■ 결과 : 양호, 특수권한이 설정된 파일이 없음"
+fi
+
+echo ""
+echo "■ 상세 현황"
+echo ""
+cat /root/script/d.txt
+echo ""
+echo ""
+echo ""
+rm -rf /root/script/d.txt
+echo
+echo
+return 0
+}
+
+
+eighteen()
+{
+echo
+echo "###################################################################################"
+echo "18.  홈 디렉터리 소유자 및 권한 설정            "
+echo "###################################################################################"
+echo
+echo
+HOME=`cat /etc/passwd | grep 'sh$' | awk -F: '{print $6}'`
+ls -ld $HOME | while read VAR
+
+do
+
+CHECK=`echo $VAR | awk '{print $9}' | awk -F/ '{print $NF}'`
+F=`echo $VAR | awk '{print $3}'`
+D=`echo $VAR | awk '{print $9}'`
+
+if [ "$CHECK" == "$F" ] ; then
+echo OK $D 의 소유자는 $CHECK 입니다.
+else
+echo WARN $D 의 소유자는 $CHECK 입니다.
+fi
+
+done
+echo
+echo
+return 0
+}
+
+demo()
+{
+        echo
+        echo "###################################################################################"
+        echo "1.  엔진 상태                                           "
+        echo "###################################################################################"
+        mkdir -p /$(date | awk '{print $1}')/$(date | awk '{print $2}')/$(date | awk '{print $3}')$(date | awk '{print $4}')
+        systemctl list-units --all | grep active | grep loaded | awk '{print $1,$3}'>/$(date | awk '{print $1}')/$(date | awk '{print $2}')/$(date | awk '{print $3}')$(date | awk '{print $4}')/active_loaded
+        systemctl list-units --all | grep active | grep "not-found" | awk '{print $2,$4}'>/$(date | awk '{print $1}')/$(date | awk '{print $2}')/$(date | awk '{print $3}')$(date | awk '{print $4}')/active_not_found
+        systemctl list-units --all | grep inactive | grep "loaded" | awk '{print $1,$3}'>/$(date | awk '{print $1}')/$(date | awk '{print $2}')/$(date | awk '{print $3}')$(date | awk '{print $4}')/inactive_loaded
+        systemctl list-units --all | grep inactive | grep "not-found" | awk '{print $2,$4}'>/$(date | awk '{print $1}')/$(date | awk '{print $2}')/$(date | awk '{print $3}')$(date | awk '{print $4}')/inactive_not_found
+        systemctl list-unit-files | grep enabled >/$(date | awk '{print $1}')/$(date | awk '{print $2}')/$(date | awk '{print $3}')$(date | awk '{print $4}')/enabled
+        systemctl list-unit-files | grep disabled >/$(date | awk '{print $1}')/$(date | awk '{print $2}')/$(date | awk '{print $3}')$(date | awk '{print $4}')/disabled
+        systemctl list-unit-files | grep static >/$(date | awk '{print $1}')/$(date | awk '{print $2}')/$(date | awk '{print $3}')$(date | awk '{print $4}')/static
+        systemctl list-units --all | grep failed  | awk '{print $2,$4}' >/$(date | awk '{print $1}')/$(date | awk '{print $2}')/$(date | awk '{print $3}')$(date | awk '{print $4}')/failed
+        echo
+        echo
+        echo  /$(date | awk '{print $1}')/$(date | awk '{print $2}')/$(date | awk '{print $3}')$(date | awk '{print $4}') "디렉터리에 저장하였습니다."
+        echo
+        echo
+return 0
+exit 0
+}
+
+
+
+
+
+
+spee()
+{
+        echo
+        echo "###################################################################################"
+        echo "2.  응답시간 점검                                          "
+        echo "###################################################################################"
+        echo
+        echo
+        echo "naver : "
+        ab http://naver.com/ | grep "Time taken for tests" 
+        echo "daum : "
+        ab http://daum.net/ | grep "Time taken for tests"
+        echo "google : "
+        ab http://google.com/ | grep "Time taken for tests"
+        echo
+        echo
+return 0
+exit 0
+}
+
+
+
+
+
+tim()
+{
+        echo
+        echo "###################################################################################"
+        echo "3.  CPU점유율 점검                                        "
+        echo "###################################################################################"
+        echo
+        echo
+        ps -eo pcpu,pid,user,comm | sort -k1 -r | head -6
+        echo
+        echo
+return 0
+exit 0
+}
+
+cpu()
+{
+        echo
+        echo "###################################################################################"
+        echo "4.  CPU 총 사용량                                          "
+        echo "###################################################################################"
+        echo
+   cpu_total_usage=$(mpstat | tail -1 | awk '{print 100-$NF}')
+   echo 
+   echo
+   if [ `expr $cpu_total_usage \< 80` == 1 ];then
+      echo " CPU 총 사용량 80%미만으로 상태 양호합니다."
+   else
+      echo " CPU 총 사용량 80%초과로 과부하 상태입니다. Disk I/O나 메모리 상태를 확인하세요."
+   fi
+   echo
+   echo
+}
+
+
+laninfo()
+{
+        echo
+        echo "###################################################################################"
+        echo "5.  회선점검                                     "
+        echo "###################################################################################"
+        echo
+        lan=$(ethtool ens33 | grep "detected:" | awk '{ print $3 }')
+        lan1="yes"
+        if [ $lan == $lan1 ]; then
+                echo
+                echo "회선이 정상적으로 연결되어 있습니다"
+                echo
+        else
+                echo
+                echo "회선이 연결되어 있지 않습니다"
+                echo
+        fi
+        echo $(ethtool ens33 | grep yes)
+        echo
+        echo
+return 0
+exit 0
+}
+
+
+netinterface()
+{
+        echo
+        echo "###################################################################################"
+        echo "6.  네트워크 인터페이스 점검                                      "
+        echo "###################################################################################"
+        echo
+        $(ifconfig ens33 > interface)
+
+        inter1=$(sed 's/(/( /' interface | grep "RX packets" | awk '{ print $7}')
+        inter2=$(sed 's/(/( /' interface | grep "TX packets" | awk '{ print $7}')
+        nu=0
+        if [ $inter1 != $nu ]; then
+                if [ $inter2 != $nu ]; then
+                        echo
+                        echo 네트워크 인터페이스 정상 작동중
+                        echo
+                else
+                        return
+                fi
+        else
+                echo
+                echo 네트워크 인터페이스 오류
+                echo
+        fi
+        rm -rf interface
+echo
+return 0
+exit 0
+
+}
+
+
+gwinfo()
+{
+        echo
+        echo "###################################################################################"
+        echo "7.  Default Gateway 점검                                "
+        echo "###################################################################################"
+        echo
+        echo
+        gw=$(route | grep UG | awk '{ print $4}')
+        gw1="UG"
+
+        if [ -z $gw ]; then
+                echo "DEFAULT GATEWAY가 설정되어 있지 않습니다"
+
+        else
+                echo "DEFAULT GATEWAY가 설정되어 있습니다"
+        fi
+        echo
+	echo $(route -n | grep "UG" | awk '{ print $2 }')
+echo	
+return 0
+exit 0
+}
+
+ioinfo()
+{
+        echo
+        echo "###################################################################################"
+        echo "8.  네트워크 I/O 점검                                "
+        echo "###################################################################################"
+        echo
+        echo
+        rxer=$(netstat -i | grep ens33 | awk '{ print $4}')
+        rxdr=$(netstat -i | grep ens33 | awk '{ print $5}')
+        rxov=$(netstat -i | grep ens33 | awk '{ print $6}')
+        txer=$(netstat -i | grep ens33 | awk '{ print $8}')
+        txdr=$(netstat -i | grep ens33 | awk '{ print $9}')
+        txov=$(netstat -i | grep ens33 | awk '{ print $10}')
+        er="0"
+
+        if [ $rxer == $er ]; then
+                if [ $rxdr == $er ]; then
+                        if [ $rxov == $er ]; then
+                                echo "패킷 송신에서 문제가 발견되지 않았습니다"
+                        else
+                                echo "송신중 버퍼의 overflow로 인해 누락된 패킷이 있>습니다"
+
+                        fi
+
+                else
+                        echo"송신중 누락된 패킷이 있습니다"
+
+                fi
+
+        else
+                echo "송신중 오류가 발생한 패킷이 있습니다"
+
+        fi
+
+
+        if [ $txer == $er ]; then
+                if [ $txdr == $er ]; then
+                        if [ $txov == $er ]; then
+                                echo "패킷 수신에서 문제가 발견되지 않았습니다"
+                        else
+                                echo "수신중 버퍼의 overflow로 인해 누락된 패킷이 있>습니다"
+                        fi
+                else
+                        echo"수신중 누락된 패킷이 있습니다"
+                fi
+        else
+                echo "수신중 오류가 발생한 패킷이 있습니다"
+        fi
+	
+        echo
+        echo
+return 0
+exit 0
+}
+
+
+ipinfo()
+{
+        echo
+        echo "###################################################################################"
+        echo "9.  IP 충돌 점검                                "
+        echo "###################################################################################"
+        echo
+        echo
+        myip=$(arping -I ens33 -c 3 192.168.131.100 | grep Received | awk '{ print $2 }')
+        coli=0
+        if [ $myip == $coli ]; then
+                echo "IP 충돌이 발견되지 않았습니다"
+        else
+                echo "IP의 충돌이 발견되었습니다"
+
+        fi
+	
+        echo
+echo
+return 0
+exit 0
+}
+
+
+
+potinfo()
+{
+        echo
+        echo "###################################################################################"
+        echo "10.  네트워크 Port 점검                                "
+        echo "###################################################################################"
+        echo
+        echo
+        pot=$(netstat -t | grep CLOSING | awk '{ print $6}')
+        clo="CLOSING"
+        pro=$(netstat -t | grep CLOSING | awk '{ print $1}')
+        if [ $pot -o $clo ]; then
+                echo "전송중 유실된 메시지가 있습니다"
+                echo "Network State CLOSING"
+                echo "CLOSING Proto is $pro"
+        else
+                echo "네트워크 포트가 정상입니다"
+        fi
+	
+        echo
+echo
+return 0
+exit 0
+}
+
+
+
+
+
+disk()
+{
+        echo
+        echo "###################################################################################"
+        echo "11.  디스크 사용률 확인                                       "
+        echo "###################################################################################"
+        echo
+        echo
+        str=`df -k | awk {'print $5$6'} | sed 's/Use%Mounted//g'`
+
+result="Check it"
+#echo $str
+
+
+for temp in `echo $str`
+do
+
+ num=`expr index $temp %`
+ value=`expr substr $temp 1 $num |sed 's/%//g'`
+
+ max=90
+ if [ "$value" -gt "$max" ]
+ then
+  #echo "$value"
+  length=`expr ${#temp}`
+  let "start = $num+1"
+  let "count =$length-$num+1"
+  dir=`expr substr $temp $start $count`
+  result="$result [\"$dir\" used=$value%]" 
+  result_bool="true"
+ fi
+done
+if [ $result_bool ]
+then
+  echo "사용률이 90%를 초과한 디스크가 존재합니다."
+echo "$result"
+else
+  echo "디스크 사용률이 90% 미만으로 정상입니다."
+ fi
+
+        echo
+        echo
+return 0
+}
+
+mem()
+{
+        echo
+        echo "###################################################################################"
+        echo "12.  메모리 확인                                          "
+        echo "###################################################################################"
+        echo
+        echo
+        MEM_TOT=`free | grep ^Mem | awk '{print $2}'`
+        MEM_FRE=`free | grep ^Mem | awk '{print $4}'`
+        MEM_BC=`free | grep ^Mem | awk '{print $6}'`
+        
+        MEM_CAH=`free | grep ^Mem | awk '{print $7}'`
+        REAL_MEM_FREE=$(($MEM_FRE+$MEM_BUF+$MEM_CAH))
+        REAL_MEM_USED=`free | grep ^Mem | awk '{print $3}'`
+        per_cent=`free | grep ^Mem | awk '{print $7}'`
+       
+        echo "================================================================="
+        echo "======================== 메모리 공간============================="
+        echo " 총 공간(Mem total)             : $MEM_TOT "
+        echo " 명목상의 여유공간(Mem free)    : $MEM_FRE "
+        echo " 버퍼/캐시 공간(Mem buff/cache) : $MEM_BC "
+        echo " 사용중인 공간                  : $REAL_MEM_USED "
+        echo " 남은 공간                      : $per_cent"
+        echo
+        echo
+              
+return 0
+}
+
+netinfo()
+{
+        echo
+        echo "###################################################################################"
+        echo "13.  네트워크 정보 확인                                          "
+        echo "###################################################################################"
+        network=$(netstat -i)
+        echo
+        echo
+        echo "$network"
+        echo
+return 0
+}
+net()
+{
+        echo
+        echo
+        echo "###################################################################################"
+        echo "14.  네트워크 연결 상태 확인                                          "
+        echo "###################################################################################"
+        echo
+        echo
+        echo "================= 168.126.63.1서버 ping점검합니다. =================="
+        echo
+        echo
+
+	echo "[*] ping 168.126.63.1"
+	ping -c 1 168.126.63.1 >/dev/null 2>&1
+	if [ $? -eq 0 ] ; then
+	    echo "외부 네트워크 연결 : [  OK  ] "
+	else
+	    echo "외부 네트워크 연결 : [ FAIL ] "
+	    
+	fi
+	
+	echo
+
+        echo
+        
+        echo
+return 0
+exit 0
+}
+
+
+zero > test
+account >> test
+one >> test
+two >> test
+three >> test
+four >> test
+five >> test
+six >> test
+seven >> test
+eight >> test
+nine >> test
+ten >> test
+eleven >> test
+file >> test
+twelve >> test
+thirteen >> test
+fourteen >> test
+fifteen >> test
+sixteen >> test
+seventeen >> test
+eighteen >> test
+system >> test
+demo >> test
+spee >> test
+tim >> test
+cpu >> test
+laninfo >> test
+netinterface >> test
+gwinfo >> test
+ioinfo >> test
+ipinfo >> test
+potinfo >> test
+disk >> test
+mem >> test
+netinfo >> test
+net >> test
